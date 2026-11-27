@@ -40,7 +40,7 @@ def product_card(code, labels, capture, root):
             f'<span class="meta">{len(capture["national"]):,} national entries · {len(capture["origins"]):,} published origins</span></a>')
 
 
-def catalogue(products, labels, latest, root):
+def catalogue(products, labels, root):
     groups = defaultdict(list)
     fields = {}
     for code in sorted(products, key=lambda k: labels[k][0]):
@@ -51,23 +51,28 @@ def catalogue(products, labels, latest, root):
         groups[sector].append(product_card(code, labels[code], capture, root))
         fields[code] = [' '.join([code, name, sector, year, capture['description']]),
                         *capture['origins'], *(' '.join(firm) for firm in capture['firms'])]
-    options = ''.join(f'<option>{escape(s)}</option>' for s in sorted(groups))
     grouped = ''.join(f'<section class="group"><h3>{escape(s)}</h3><div class="grid">{"".join(groups[s])}</div></section>' for s in sorted(groups))
-    return f'''<p>Search the latest available listings by product, six-digit HS code, importer, city or origin. Open a product to compare trade years.</p>
-<form class="filters" id="catalog-filter" hidden><label>Search listings<input type="search" name="q" placeholder="Try coffee, Burnaby or 090111"></label>
+    return f'{grouped}<script type="application/json" id="catalog-fields">{embedded(fields)}</script>'
+
+
+def search_form(labels):
+    sectors = sorted({sector for _, sector in labels.values()})
+    options = ''.join(f'<option>{escape(sector)}</option>' for sector in sectors)
+    return f'''<form class="filters" id="catalog-filter" hidden>
+<label>Search listings<input type="search" name="q" placeholder="Try coffee, Burnaby or 090111"></label>
 <label class="compact">Sector<select name="sector"><option value="">All sectors</option>{options}</select></label>
-<button type="button">Clear filters</button></form><p id="search-status" class="status" role="status"></p>
-{grouped}<script type="application/json" id="catalog-fields">{embedded(fields)}</script>'''
+<button type="button">Clear filters</button></form><p id="search-status" class="status" role="status"></p>'''
 
 
 def overview(meta, products, labels, root, directory=False):
     latest = max(meta['years'])
     count = len(products)
-    body = catalogue(products, labels, latest, root)
+    body = catalogue(products, labels, root)
+    form = search_form(labels)
     if directory:
         return (f'<section class="hero"><div class="wrap"><p class="eyebrow">Import Trail · Product directory</p>'
                 f'<h1>Canadian importer reports by product</h1><p>Explore {count} selected goods from the Canadian Importers Database. '
-                f'The latest trade year is {latest}.</p></div></section>' + section('Find a product', body, 'products'))
+                f'The latest trade year is {latest}.</p></div></section>' + section('Find a product', form + body, 'products'))
     code = '090111'
     example = ''
     if code in products:
@@ -81,7 +86,8 @@ def overview(meta, products, labels, root, directory=False):
 <p>ISED attributes this share to a group of {count_firms} major importers.</p>
 {link(root + route(code,year,year), 'Explore the green coffee report →')}</aside>'''
     hero = f'''<section class="hero"><div class="wrap intro"><div><p class="eyebrow">Canadian Importers Database · Trade year {latest}</p>
-<h1>Who imports goods into Canada?</h1><p>Find the companies listed for a product, see their locations and explore which importers appear for a particular country of origin.</p>
+<h1>Who imports goods into Canada?</h1><p>Search by product, importer, city, origin or HS code to find companies listed in Canadian customs records.</p>
+{form}
 <p>{link('#products', 'Browse the '+str(count)+' products ↓')}</p></div>{example}</div></section>'''
     years = ' · '.join(link(meta['years'][y]['catalogue'], y+' source edition') for y in sorted(meta['years'],reverse=True))
     notes = f'''<div class="notes"><p>Innovation, Science and Economic Development Canada (ISED) publishes annual lists of major importers using customs records. The national product list and the product-and-origin lists have separate coverage. Companies may include brokers and non-resident importers.</p>
@@ -89,7 +95,7 @@ def overview(meta, products, labels, root, directory=False):
 <p>{years} · {link(FAQ, 'ISED methodology')} · {link(OGL, 'Open Government Licence – Canada')}</p>
 <p>Use {link(EXPORT, 'Export Neighbours')} to explore Canadian exports, or {link(MAPLE, 'Maple Label’s Québec coffee and cheese examples')} to read Canadian-origin claims on retail packaging.</p>
 <p>Search filters run in your browser. The current filter appears in the page address for sharing.</p></div>'''
-    return hero + section('Find a product', body, 'products') + section('Sources and coverage', notes, 'sources')
+    return hero + section('Product reports', body, 'products') + section('Sources and coverage', notes, 'sources')
 
 
 def address(firm):

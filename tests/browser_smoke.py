@@ -34,16 +34,20 @@ def main():
             with sync_playwright() as p:
                 browser=p.chromium.launch(executable_path=os.environ.get('CHROMIUM_PATH') or None)
                 errors=[]
-                for width, js in [(1280,True),(390,True),(320,False)]:
-                    ctx=browser.new_context(viewport={'width':width,'height':850},java_script_enabled=js)
+                for width, height, js in [(1280,850,True),(390,844,True),(320,640,True),(320,640,False)]:
+                    ctx=browser.new_context(viewport={'width':width,'height':height},java_script_enabled=js)
                     page=ctx.new_page()
                     page.on('pageerror',lambda e:errors.append(str(e)))
                     page.goto(base)
                     assert page.get_by_role('heading',level=1).inner_text()=='Who imports goods into Canada?'
                     assert page.evaluate('document.documentElement.scrollWidth <= innerWidth')
+                    variant='interactive' if js else 'static'
+                    page.screenshot(path=str(shots/f'home-{width}-{variant}.png'))
                     if js:
                         search=page.get_by_role('searchbox',name='Search listings')
-                        assert search.is_visible() and search.bounding_box()['y'] < 850
+                        search.wait_for(state='visible')
+                        box=search.bounding_box()
+                        assert 0 <= box['y'] and box['y'] + box['height'] <= height, (width,height,box)
                         search.fill('nothing-matches-xyz')
                         assert page.locator('.product:visible').count()==0
                         search.fill(listing[0])
@@ -55,7 +59,6 @@ def main():
                         page.get_by_role('button',name='Clear filters').click()
                     else:
                         assert not page.locator('#catalog-filter').is_visible()
-                    page.screenshot(path=str(shots/f'home-{width}.png'))
                     page.locator('[data-code="090111"]').click()
                     assert 'green coffee' in page.locator('h1').inner_text().lower()
                     if national:
