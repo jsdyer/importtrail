@@ -1,205 +1,51 @@
-# CoolCode browser tool template
-
-A starting point for independent tools at `coolcode.ca/<repo>/`: a working local-text
-example, responsive UI, Python standard-library build, Node tests, PR checks and Pages
-publication. No npm install is needed.
-
-## Using the example
+# Import Trail
 
 <!-- coolcode:guide -->
-The page opens with four city names and three cleaned lines. Edit the repeated Halifax entry to see the result change, or replace the example with your own list.
+Search a product, company, city or HS code to explore Canada’s annual major-importer lists. Each product opens a shareable report with a national directory, separate lists for each published country of origin and earlier trade years. Selected reports also show ISED’s cumulative import values and shares. The source check runs monthly and builds use the last verified workbooks.
 <!-- /coolcode:guide -->
 
-For a real tool, replace this paragraph with one or two plain-text sentences
-about an example, a limit or how to interpret the results. Keep the source,
-coverage, refresh behaviour and a worked example in this README as appropriate.
-When updating a tool, revise any details its behaviour has changed and keep the
-homepage's shorter data-source sentence in `tool.json` accurate.
-The hub imports the marked note into the catalogue README.
+[Open Import Trail](https://coolcode.ca/importtrail/) · [Browse reports](https://coolcode.ca/importtrail/records/) · [Green coffee beans](https://coolcode.ca/importtrail/records/hs-090111/)
 
-## One-time template setup
+## Using the directory
 
-Enable **Settings → General → Template repository** here. This repository does not
-need Pages enabled: its workflow builds/tests but intentionally skips deployment.
-New copies also skip deployment until `scripts/init.py` sets the tool ID to match
-their repository name. This lets you create the repo before configuring Pages.
+The first release covers 24 HS6 classifications across food and drink, electronics, clothing, household goods, recreation and transport. Open any card to read the exact classification and trade year. Search runs locally and accepts product names, HS codes, companies, cities and origin labels in the selected products. Choose a trade year on a report to compare published listings. The directory, origin disclosures, tables and year links work with JavaScript disabled.
 
-## Start a new tool
+For green coffee beans (HS 090111), ISED’s 2024 cumulative concentration table reports 13 major importers accounting for CAD 1,246,106,976, or 79.36% of CAD 1,570,246,910. In the national list, Swiss Water is listed in Burnaby, British Columbia. The 2023 national workbook lists 11 entries. The report links to Maple Label for a different question about the origin claims on coffee packaging.
 
-1. Select **Use this template → Create a new repository**, choose owner `jsdyer`,
-   a unique lowercase name such as `my-tool`, and public visibility.
-2. Clone the new repository. Use Python 3.12+ and Node 24+.
-3. Set the identity, using a slug that matches the repository name:
+## Sources and interpretation
 
-```sh
-python3 scripts/init.py my-tool --title "My Tool" --description "Describe what this tool does."
-```
+Innovation, Science and Economic Development Canada (ISED) produces the annual Canadian Importers Database. The initial editions are [2024](https://open.canada.ca/data/en/dataset/e5eae1d4-687c-4db2-9273-a8d2d711144c) and [2023](https://open.canada.ca/data/en/dataset/873cfcb0-1c9b-4a48-a366-076697069bb9). Contains information licensed under the [Open Government Licence – Canada](https://open.canada.ca/en/open-government-licence-canada). See [ISED’s methodology](https://ised-isde.canada.ca/site/ised/en/canadian-importers-database/frequently-asked-questions).
 
-Review the category, tags and icon in `tool.json`. `access: "browser"` tells the main
-catalogue that the tool works immediately without installation. `--owner` supports a different
-GitHub owner, but only projects owned by `jsdyer` inherit the CoolCode domain.
+- The national table comes from the *Major Importers by HS6* workbook. Country lists come from the separate *Major Importers by HS6, country* workbook, which explicitly records both product and country for each entry.
+- Import Trail deduplicates exact company, city and province/state tuples within each list. ISED can list brokers and non-resident importers. A business address identifies the importer’s location. The country field identifies the recorded origin of the goods. The same firm can appear under several origins.
+- ISED identifies major importers collectively accounting for up to 80% of imports, subject to confidentiality rules. Where the national workbook contains no entries, the report says so. A zero entry count gives no estimate of import value.
+- Concentration comes from the national HTML product report for the matching trade year. Canadian dollars and shares refer to cumulative groups. The source provides no individual firm amounts, ranks for the alphabetically listed firms, or retail-brand supply relationships.
+- The description workbook supplies classification text. For some 2023 codes, the publisher supplies importer rows but omits the classification from its description workbook. Import Trail includes those rows and identifies the classification using its plain-language label.
+- Each report links to its edition and component files. The [source receipt](https://coolcode.ca/importtrail/data/editions.json) lists publisher URLs and SHA-256 hashes for each retained edition’s workbooks. Each report offers a compact JSON download. Its `firms` array holds name, city and province/state. Integer entries in `national` and `origins` index that same year’s array starting at zero. Each concentration row holds the cumulative importer count, CAD value, and percentage, with a null count marking all importers.
 
-4. Replace the example in `web/` and its tests. Open the real tool at a phone width. Can a
-   first-time visitor tell what is shown and try the main action? On a map, put the
-   selected place, meaning of the markers and observation date beside the map. On a
-   calculator, a labelled editable example can show the inputs and their result together.
-   If the tool needs the visitor’s own file or a live lookup, identify the input and what
-   they will get before asking for it. Update the privacy explanation, source attribution
-   and README for the finished tool.
-5. Test and preview:
+## Refresh and publication
 
-```sh
-node --test tests/*.test.mjs
-python3 -m unittest discover -s tests -v
-python3 scripts/build.py
-python3 -m http.server 8000 --directory dist
-```
+The source collection runs on the seventh of each month at **10:47 UTC**, or on demand from **Actions → Check Canadian importer editions → Run workflow**. GitHub can delay the scheduled start. The collector finds the two newest dated ISED editions, verifies the licence and data columns, downloads both sets of workbooks and checks the configured concentration reports against the current trade year. It preserves older editions previously captured. An incompatible workbook or changed report year fails the check before replacing verified snapshots. The source check date and trade year appear separately on the site.
 
-Open `http://localhost:8000/`. The example trims lines, skips blanks and removes exact
-duplicates, preserving first-seen order and capitalization. It processes the text in tab memory. Update that explanation if your app behaves differently.
-
-CI also tests the browser flow and mobile layout at a project subpath. Replace the
-sample assertions in `tests/browser_smoke.py` when implementing your own UI. To run
-that check locally (optional for ordinary preview):
-
-```sh
-python3 -m venv .venv
-. .venv/bin/activate
-python3 -m pip install -r tests/browser-requirements.txt
-python3 -m playwright install --with-deps chromium
-python3 tests/browser_smoke.py
-```
-
-Playwright is a test-only dependency; the app and its static build do not use it.
+The scheduled workflow saves validated data and explicitly dispatches the Pages workflow. Pages builds offline from the repository, runs unit and browser checks, and deploys successful main-branch builds. A failed build leaves the previous deployment available. The independent CoolCode watchdog can inspect [source status](https://coolcode.ca/importtrail/data/status.json). Its `checked_at` is the UTC time of the last successful source collection, `latest_year` is the newest observed trade year and `product_count` counts configured products. The separate weekly schedule guard covers `refresh.yml`.
 
 ## Expand or customize
 
-Every implemented tool should replace this section with its actual configuration
-path and a working example. A small `config.json` can hold default entities,
-query presets, source choices and request limits. Those defaults should be useful
-starting points, while visitors can enter other valid inputs whenever the source
-supports them. Keep provider limits explicit and separate from the starter list.
-
-Derive counts, filters and item validation from the current data. Do not require
-exactly the initial number of items. Add a test that expands the configuration,
-and keep historical captures readable when their coverage differs from today's
-watchlist. Display the selected capture date accurately.
-
-Document which changes need only a normal code push and which also need a data
-refresh. Include the refresh command or exact GitHub workflow and input, followed
-by the publication step. A successful code build need not mean a new collection
-has been fetched. The starter itself has no external collection or refresh.
-
-## Publish and register
-
-When the actual tool is ready, in the **new tool repository** set **Settings → Pages → Build and deployment →
-Source → GitHub Actions**. Push to `main`, or manually run **Browser tool · Check and
-publish** after enabling Pages. If the initial deployment ran before Pages was enabled,
-enable it and rerun. PRs only check/build and provide a downloadable preview artifact.
-
-Keep `{{VISIT_COUNTER}}` in the page head and `{{ISSUE_LINK}}` in the footer when replacing the starter UI. The build enables these for initialized CoolCode repositories. The shared counter records aggregate opens on coolcode.ca by public tool ID. Toolbox inputs and URL parameters are excluded. The issue link opens a reporting form with the tool already selected.
-
-Keep app-owned asset paths and module imports relative. Check `https://coolcode.ca/my-tool/`.
-Do not add a CNAME or set `coolcode.ca` as this project's custom domain; the account
-site supplies it. Only successful `main` builds deploy.
-
-After verifying the app, copy the reviewed object from `tool.json` into `data/tools.json`
-in [the main site](https://github.com/jsdyer/jsdyer.github.io). Each tool still builds
-independently. The hub generates the visitor Worker ID list, watchdog targets and sitemap; deploy and verify the affected services before considering the release complete. Update the hub record when listing metadata changes; the hub is the
-authority for discovery. Every change must follow the [mandatory lifecycle](https://github.com/jsdyer/jsdyer.github.io/blob/main/docs/tool-lifecycle.md). App-only changes may leave integrations unchanged, but this must be checked; documentation, source fields, schedules and registration changes also require the hub update.
-
-The main site separates **Use in your browser** from **Install yourself**. An app
-that asks for a file is still a browser tool. Standalone Linux packages should start
-in their own repositories with their own build/release workflow, rather than copying
-this browser-only scaffold. Their hub record uses `access: "install"`, links to an
-installation guide, and includes `requirements`.
-
-## Files
-
-| Path | Purpose |
-| --- | --- |
-| `tool.json` | Page metadata and a ready-to-copy catalogue record |
-| `web/` | HTML, responsive CSS, DOM interactions and separate model logic |
-| `scripts/build.py` | Escape metadata and build `web/` into `dist/` |
-| `scripts/init.py` | Set a new project's identity |
-| `scripts/add_schedule_guard.py` | Add an opt-in guard for explicitly selected scheduled collectors |
-| `tests/` | Application and builder tests |
-| `.github/workflows/pages.yml` | Check PRs and publish successful main builds |
-| `AGENTS.md` | Instructions for future coding work |
-
-Namespace optional storage as `coolcode:<tool-id>:<key>`; CoolCode paths share a
-browser origin. Don't save pasted text/uploads by default. Document external APIs
-and send only the information needed for the selected action. Never embed secrets.
-
-Scheduled refresh is opt-in. Validate source data before deploying, display its date,
-and preserve the last good deployment on failure. Public-repository schedules can
-stop after 60 days without repository activity.
-
-When adding a collector with `on.schedule`, also keep `workflow_dispatch` available
-for the independent Linux server scheduler. Generate a separate schedule guard,
-listing every scheduled collector in the repository:
+1. In `config/products.json`, add the six-digit HS6 code as a string, preserving any leading zero. Its value is a pair containing the display name and directory sector. Sector filters are generated from this file.
+2. To include national cumulative import values, add the same code to `config/concentration.json` after confirming that ISED’s current product report contains a market concentration table. Other products still receive full name and origin reports.
+3. Install the collection dependencies and refresh from ISED. The two most recent releases are checked, with previously stored older years preserved. A missing code in the newest edition prompts a classification review.
+4. Run the build and tests below. Review and commit `config/` and `data/` to main to publish the new pages, or dispatch the source workflow after your configuration is merged. Product pages, filters, downloadable summaries and the child sitemap follow verified data automatically.
 
 ```sh
-python3 scripts/add_schedule_guard.py --repository jsdyer/my-tool .github/workflows/pages.yml
+python -m pip install -r collectors/requirements.txt
+python collectors/refresh.py
+node --test tests/*.test.mjs
+python -m unittest discover -s tests -v
+python scripts/build.py
+python -m pip install -r tests/browser-requirements.txt
+python -m playwright install chromium
+python tests/browser_smoke.py
+python -m http.server 8000 --directory dist
 ```
 
-Replace the repository and workflow paths with the real values. Review the generated
-allowlist, commit `.github/workflows/schedule-guard.yml`, and verify its first push
-run. Re-run the command with the complete list when adding, renaming or removing a
-collector. The guard runs weekly, independently of collector failures, and calls
-GitHub's enable-workflow API for those paths and itself. It restores workflows
-disabled for inactivity and preserves manually disabled workflows. It does not
-fetch data, create dummy commits or change source/check timestamps.
-
-This is an interim mitigation: GitHub does not document active-workflow renewal as
-a permanent exemption, and scheduled runs can be delayed or dropped. Register the
-collector and its freshness expectations in the independent server scheduler too.
-Document its real data check, collection and publication steps in the tool README.
-The starter has no scheduled collector and therefore ships no recurring guard job.
-
-Templates don't propagate future edits automatically. Adopt fixes explicitly and
-consider a versioned reusable workflow once several tools confirm the shared process.
-Choose and add the intended software license before distributing a new project.
-
-## Search metadata
-
-Initialize the page title with a concise task phrase, while keeping the creative
-app name in `--title`:
-
-```sh
-python3 scripts/init.py line-cleaner --title "Line Cleaner" --description "Trim lines and remove exact duplicates in your browser." --search-title "Trim Lines & Remove Duplicates"
-```
-
-The build adds static `WebApplication` JSON-LD, a free CAD offer and social metadata.
-For initialized jsdyer tools it also adds the canonical CoolCode URL. Forks and the
-uninitialized template do not claim a CoolCode canonical. Review the application
-category in `scripts/build.py` when adapting the tool; the starter is a utility.
-Do not invent ratings or reviews. Search markup does not guarantee a rich result.
-
-For a saved public dataset, pass Dataset objects to `add_search_metadata` from the
-app builder, with actual source attribution, licence, coverage and download URLs.
-Derive counts and dates from the same snapshot used by the app and show those details
-on the page. Keep source edition, retrieval and page-build time distinct. Omit an
-unknown source modification date instead of setting it to the current build time.
-Read the hub's `docs/search-discovery.md` for the release checklist.
-
-## Publish a preconfigured common-use page
-
-Choose a task that works on arrival. Give it its own HTML title, heading, short description, and a starting result a visitor can change. The starter can build reviewed pages from a repository-level `common-pages/` directory. The optional example under `examples/` cleans a duplicate city list and shows the original and cleaned values in its first HTML response.
-
-To preview the example with the starter application:
-
-```sh
-cp -r examples/common-pages common-pages
-python3 scripts/build.py
-python3 -m http.server 8000 --directory dist
-```
-
-Open `http://localhost:8000/remove-duplicate-cities/` and edit the list. New tools can use their own calculator, filters and source data in place of this example. For each published page:
-
-1. Add its directory slug, task title and description to `common-pages/manifest.json` and its HTML to `common-pages/<slug>.html`. The builder accepts one lowercase slug per page.
-2. Reference shared assets through `{{ASSET_PREFIX}}` in that HTML, retain the root tool ID and reporting placeholders, and use relative links within the tool. The builder generates that page's canonical and social metadata. The primary landing page keeps its existing search title. The root page's `<!-- common-use-links -->` marker renders links to the configured pages.
-3. Test the working preset from its actual directory. Check its static result, editable inputs, canonical, assets and stats ID. A tool that generates its own pages can perform these same checks in its custom builder.
-4. Add a matching entry to the existing tool's hub record in `data/tools.json`, for example `"use_cases": [{"title": "Remove duplicate cities from a list", "path": "remove-duplicate-cities/"}]`. Push the working app, verify the public URL, then publish its catalogue and sitemap entry.
-
-The default build publishes only the main tool. Publishing an example requires explicitly copying or authoring its definitions. Keep personal inputs and transient combinations out of common-use URLs.
+The build and unit tests require Python 3.11+ and Node for the search tests. Only source collection needs openpyxl and lxml. Search queries are filtered locally and reflected in the browser address for sharing. Opening or reloading a shared filtered URL transmits that URL to the hosting service. The application does not store searches or request an account.

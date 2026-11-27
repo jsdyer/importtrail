@@ -1,74 +1,85 @@
-"""Exercise the built starter at a project subpath in Chromium."""
+"""Test first visits, local search and static edition pages at desktop and phone widths."""
 from functools import partial
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-import shutil
+import json
+import os
 import tempfile
-import sys
 import threading
 from playwright.sync_api import sync_playwright
 
 ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT / "scripts"))
-from build import build
 
-
-class QuietHandler(SimpleHTTPRequestHandler):
-    def log_message(self, *args):
+class Quiet(SimpleHTTPRequestHandler):
+    def log_message(self,*args):
         pass
 
 
 def main():
-    screenshots = ROOT / "browser-checks"
-    screenshots.mkdir(exist_ok=True)
-    with tempfile.TemporaryDirectory() as temporary:
-        shutil.copytree(ROOT / "dist", Path(temporary) / "example-tool")
-        example = Path(temporary) / "preset-fixture"
-        example.mkdir()
-        shutil.copytree(ROOT / "web", example / "web")
-        shutil.copytree(ROOT / "examples/common-pages", example / "common-pages")
-        for name in ("tool.json", "README.md"):
-            shutil.copyfile(ROOT / name, example / name)
-        build(example)
-        server = ThreadingHTTPServer(("127.0.0.1", 0), partial(QuietHandler, directory=temporary))
-        threading.Thread(target=server.serve_forever, daemon=True).start()
+    data=ROOT/'data/products'
+    coffee=json.loads((data/'090111.json').read_text())['years']
+    year=max(coffee)
+    national=coffee[year]['national']
+    listing=coffee[year]['firms'][national[0]] if national else coffee[year]['firms'][0]
+    origin=next(iter(coffee[year]['origins']),None)
+    prior=min(coffee)
+    shots=ROOT/'browser-checks'
+    shots.mkdir(exist_ok=True)
+    with tempfile.TemporaryDirectory() as temp:
+        (Path(temp)/'importtrail').symlink_to(ROOT/'dist',target_is_directory=True)
+        server=ThreadingHTTPServer(('127.0.0.1',0),partial(Quiet,directory=temp))
+        threading.Thread(target=server.serve_forever,daemon=True).start()
+        base=f'http://127.0.0.1:{server.server_port}/importtrail/'
         try:
             with sync_playwright() as p:
-                browser = p.chromium.launch()
-                page = browser.new_page(viewport={"width": 1280, "height": 1000})
-                errors = []
-                page.on("pageerror", lambda error: errors.append(str(error)))
-                page.goto(f"http://127.0.0.1:{server.server_port}/example-tool/")
-                assert page.locator("#input").input_value() == "Halifax\nLangley\nHalifax\nVancouver"
-                assert page.locator("#output").input_value() == "Halifax\nLangley\nVancouver"
-                assert "1 duplicate removed" in page.locator("#status").inner_text()
-                page.locator("#input").fill('<img src=x onerror="alert(1)">\n<img src=x onerror="alert(1)">')
-                assert page.locator("#output").input_value() == '<img src=x onerror="alert(1)">'
-                assert page.locator("img").count() == 0
-                page.locator("#clear").click()
-                assert page.locator("#output").input_value() == ""
-                assert "Paste one item per line" in page.locator("#status").inner_text()
-                page.locator("#sample").click()
-                assert page.locator("#output").input_value() == "Halifax\nLangley\nVancouver"
-                page.screenshot(path=str(screenshots / "desktop.png"), full_page=True)
-                page.set_viewport_size({"width": 390, "height": 844})
-                page.goto(f"http://127.0.0.1:{server.server_port}/example-tool/")
-                assert page.locator("#input").bounding_box()["y"] < 844
-                assert page.locator("#output").input_value() == "Halifax\nLangley\nVancouver"
-                assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth")
-                page.screenshot(path=str(screenshots / "mobile.png"), full_page=True)
-                page.goto(f"http://127.0.0.1:{server.server_port}/preset-fixture/dist/remove-duplicate-cities/")
-                assert page.locator("#output").input_value() == "Vancouver\nHalifax\nCharlottetown"
-                page.locator("#input").fill("Surrey\nSurrey\nOttawa")
-                assert page.locator("#output").input_value() == "Surrey\nOttawa"
-                page.get_by_role("button", name="Restore example").click()
-                assert page.locator("#output").input_value() == "Vancouver\nHalifax\nCharlottetown"
+                browser=p.chromium.launch(executable_path=os.environ.get('CHROMIUM_PATH') or None)
+                errors=[]
+                for width, js in [(1280,True),(390,True),(320,False)]:
+                    ctx=browser.new_context(viewport={'width':width,'height':850},java_script_enabled=js)
+                    page=ctx.new_page()
+                    page.on('pageerror',lambda e:errors.append(str(e)))
+                    page.goto(base)
+                    assert page.get_by_role('heading',level=1).inner_text()=='Who imports goods into Canada?'
+                    assert page.evaluate('document.documentElement.scrollWidth <= innerWidth')
+                    if js:
+                        search=page.get_by_role('searchbox',name='Search listings')
+                        assert search.is_visible() and search.bounding_box()['y'] < 850
+                        search.fill('nothing-matches-xyz')
+                        assert page.locator('.product:visible').count()==0
+                        search.fill(listing[0])
+                        assert page.locator('[data-code="090111"]').is_visible()
+                        page.get_by_role('button',name='Clear filters').click()
+                        page.get_by_label('Sector').select_option('Electronics')
+                        assert page.locator('[data-code="847130"]').is_visible()
+                        assert not page.locator('[data-code="090111"]').is_visible()
+                        page.get_by_role('button',name='Clear filters').click()
+                    else:
+                        assert not page.locator('#catalog-filter').is_visible()
+                    page.screenshot(path=str(shots/f'home-{width}.png'))
+                    page.locator('[data-code="090111"]').click()
+                    assert 'green coffee' in page.locator('h1').inner_text().lower()
+                    if national:
+                        assert page.locator('#national').get_by_text(listing[0],exact=True).count()>0
+                    assert page.evaluate('document.documentElement.scrollWidth <= innerWidth')
+                    if js and national:
+                        name_filter=page.get_by_role('searchbox',name='Find a listed name or city')
+                        name_filter.fill(listing[0])
+                        assert page.locator('#national tbody tr:visible').count()>0
+                        name_filter.fill('no-such-company-xyz')
+                        assert page.locator('#national tbody tr:visible').count()==0
+                    if origin:
+                        group=page.locator('details').filter(has=page.locator('summary',has_text=origin)).first
+                        group.locator('summary').click()
+                        assert group.locator('li').first.is_visible()
+                    page.get_by_role('link',name=prior,exact=True).click()
+                    assert f'/{prior}/' in page.url and prior in page.locator('.years strong').inner_text()
+                    assert 'Canadian importers' in page.locator('h1').inner_text()
+                    assert page.evaluate('document.documentElement.scrollWidth <= innerWidth')
+                    ctx.close()
                 assert not errors, errors
                 browser.close()
-            print("Browser checks passed: project subpath, sample, clear, safe text and mobile layout")
         finally:
             server.shutdown()
 
-
-if __name__ == "__main__":
+if __name__=='__main__':
     main()

@@ -1,40 +1,49 @@
-import { cleanLines } from './model.mjs';
-const input = document.querySelector('#input');
-const output = document.querySelector('#output');
-const status = document.querySelector('#status');
-const copy = document.querySelector('#copy');
-function update() {
-  const result = cleanLines(input.value);
-  output.value = result.text;
-  status.textContent = result.count
-    ? `${result.count} unique ${result.count === 1 ? 'line' : 'lines'}. ${result.removed} ${result.removed === 1 ? 'duplicate' : 'duplicates'} removed.`
-    : 'Paste one item per line or restore the example.';
-  copy.disabled = result.count === 0;
-}
-input.addEventListener('input', update);
-document.querySelector('#sample').addEventListener('click', () => {
-  input.value = input.defaultValue;
-  update();
-});
-document.querySelector('#clear').addEventListener('click', () => {
-  input.value = '';
-  update();
-  input.focus();
-});
-if (navigator.clipboard && window.isSecureContext) {
-  copy.hidden = false;
-  copy.disabled = true;
-  copy.addEventListener('click', async () => {
-    try {
-      await navigator.clipboard.writeText(output.value);
-      status.textContent = 'Result copied.';
-    } catch {
-      output.focus();
-      output.select();
-      status.textContent = 'Copy was unavailable. The result is selected so you can copy it manually.';
+import { matches, matchesProduct } from "./model.mjs";
+
+const catalog = document.querySelector("#catalog-filter");
+if (catalog) {
+  const fields = JSON.parse(document.querySelector("#catalog-fields").textContent);
+  const cards = [...document.querySelectorAll("[data-code]")];
+  const q = catalog.elements.q, sector = catalog.elements.sector;
+  const url = new URL(location.href);
+  q.value = url.searchParams.get("q") || "";
+  const group = url.searchParams.get("sector");
+  if ([...sector.options].some(option => option.value === group)) sector.value = group;
+  function filter() {
+    let count = 0;
+    for (const card of cards) {
+      card.hidden = (sector.value && card.dataset.sector !== sector.value) || !matchesProduct(fields[card.dataset.code], q.value);
+      if (!card.hidden) count++;
     }
-  });
+    for (const block of document.querySelectorAll(".group")) block.hidden = !block.querySelector("[data-code]:not([hidden])");
+    document.querySelector("#search-status").textContent = count ? count + (count === 1 ? " matching product" : " matching products") : "No matching products in this selection. Try a broader name or clear the filters.";
+    const next = new URL(location.href);
+    for (const input of [q, sector]) {
+      if (input.value.trim()) next.searchParams.set(input.name, input.value.trim());
+      else next.searchParams.delete(input.name);
+    }
+    history.replaceState(null, "", next);
+  }
+  catalog.hidden = false;
+  catalog.addEventListener("input", filter);
+  catalog.addEventListener("submit", event => { event.preventDefault(); filter(); });
+  catalog.querySelector("button").addEventListener("click", () => { q.value = ""; sector.value = ""; filter(); q.focus(); });
+  filter();
 }
-if (input.value) update();
-// Namespace future preference storage as coolcode:<tool-id>:<key>.
-// Do not persist pasted text or uploads by default.
+const nameSearch = document.querySelector("#firms-filter");
+if (nameSearch) {
+  const input = nameSearch.elements.name;
+  const rows = [...document.querySelectorAll("#national tbody tr")];
+  nameSearch.hidden = false;
+  function filterNames() {
+    let count = 0;
+    for (const row of rows) {
+      row.hidden = !matches(row.textContent, input.value);
+      if (!row.hidden) count++;
+    }
+    document.querySelector("#firms-status").textContent = count + (count === 1 ? " matching entry" : " matching entries");
+  }
+  input.addEventListener("input", filterNames);
+  nameSearch.addEventListener("submit", e => {e.preventDefault(); filterNames();});
+  nameSearch.querySelector("button").addEventListener("click", () => {input.value = ""; filterNames(); input.focus();});
+}

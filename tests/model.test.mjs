@@ -1,21 +1,13 @@
-import test from 'node:test';
-import assert from 'node:assert/strict';
-import { cleanLines } from '../web/model.mjs';
-test('trims, removes blanks and preserves first-seen order', () => {
-  assert.deepEqual(cleanLines('  Halifax\nLangley\nHalifax\n\nVancouver  '), {
-    text: 'Halifax\nLangley\nVancouver', count: 3, removed: 1,
-  });
+import test from "node:test";
+import assert from "node:assert/strict";
+import { matches, matchesProduct } from "../web/model.mjs";
+
+test("search matches words within one importer or product, across case and accents", () => {
+  const fields = ["Café vert 090111", "Swiss Water Burnaby British Columbia", "Brazil"];
+  assert.ok(matchesProduct(fields, "cafe 0901"));
+  assert.ok(matchesProduct(fields, "BURNABY swiss"));
+  assert.ok(matchesProduct(fields, "Brazil"));
+  assert.ok(matchesProduct(fields, ""));
+  assert.equal(matchesProduct(fields, "Brazil Burnaby"), false);
+  assert.equal(matches("Québec", "<img onerror=alert()>"), false);
 });
-test('supports Windows and old Mac line endings', () => {
-  assert.equal(cleanLines('a\r\nb\ra').text, 'a\nb');
-});
-test('empty text and whitespace produce an empty result', () => {
-  assert.deepEqual(cleanLines(' \n\t'), { text: '', count: 0, removed: 0 });
-});
-test('preserves case and Unicode', () => {
-  assert.equal(cleanLines('Québec\nquébec\n東京\nQuébec').text, 'Québec\nquébec\n東京');
-});
-test('treats markup as ordinary text', () => {
-  assert.equal(cleanLines('<script>alert(1)</script>\n<script>alert(1)</script>').text, '<script>alert(1)</script>');
-});
-test('rejects non-text input', () => { assert.throws(() => cleanLines(null), TypeError); });

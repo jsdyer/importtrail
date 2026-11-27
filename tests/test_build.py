@@ -1,113 +1,80 @@
+import csv
 import json
 from pathlib import Path
 import re
-import shutil
 import sys
 import tempfile
 import unittest
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
-from build import ROOT, build, metadata
+from xml.etree import ElementTree
 
+ROOT = Path(__file__).resolve().parents[1]
+sys.path[:0] = [str(ROOT/'scripts'), str(ROOT/'collectors')]
+from build import build, load
+from pages import BASE, overview, profile, route
+from refresh import extract, FILES
 
-class BuildTests(unittest.TestCase):
-    def setUp(self):
-        self.temporary = tempfile.TemporaryDirectory()
-        self.addCleanup(self.temporary.cleanup)
-        self.root = Path(self.temporary.name)
-        shutil.copytree(ROOT / "web", self.root / "web")
-        shutil.copyfile(ROOT / "tool.json", self.root / "tool.json")
-        shutil.copyfile(ROOT / "README.md", self.root / "README.md")
+class ImportTrailTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.status = build()
+        cls.products, cls.labels, cls.meta = load(ROOT)
+        cls.dist = ROOT/'dist'
 
-    def edit(self, **changes):
-        tool = json.loads((self.root / "tool.json").read_text())
-        tool.update(changes)
-        (self.root / "tool.json").write_text(json.dumps(tool))
+    def test_sitemap_contains_only_published_results_with_unique_canonicals(self):
+        locs = [n.text for n in ElementTree.parse(self.dist/'sitemap.xml').findall('./{*}url/{*}loc')]
+        self.assertEqual(len(locs),self.status['product_year_count']+1)
+        self.assertEqual(len(locs),len(set(locs)))
+        for url in locs:
+            self.assertTrue(url.startswith(BASE+'records/'))
+            page=(self.dist/url.removeprefix(BASE)/'index.html').read_text()
+            self.assertIn(f'rel="canonical" href="{url}"', page)
+            self.assertEqual(page.count('<h1>'),1)
+        home=(self.dist/'index.html').read_text()
+        self.assertIn('"@type": "Dataset"',home)
+        self.assertIn('https://coolcode.ca/maplelabel/records/quebec-cheese-and-coffee/', home)
 
-    def test_build_is_scoped_to_web_and_escapes_metadata(self):
-        (self.root / "private.txt").write_text("must not publish")
-        self.edit(title='<img src=x onerror="bad()">')
-        build(self.root)
-        page = (self.root / "dist/index.html").read_text()
-        self.assertIn('&lt;img', page)
-        self.assertNotIn('<img', page)
-        self.assertNotIn('{{', page)
-        self.assertIn('href="./style.css"', page)
-        self.assertFalse((self.root / "dist/private.txt").exists())
-        self.assertTrue((self.root / "dist/.nojekyll").exists())
+    def test_green_coffee_evidence_in_static_markup(self):
+        record=self.products['090111']['years']['2024']
+        page=(self.dist/route('090111','2024',max(self.products['090111']['years']))/'index.html').read_text()
+        self.assertEqual(record['concentration'][-1][-1],100.0)
+        for count,value,share in record['concentration']:
+            self.assertIn(f'{share:g}%', page)
+            self.assertIn(f'${value:,}',page)
+        national_names=[record['firms'][i][0] for i in record['national']]
+        self.assertTrue(national_names)
+        self.assertTrue(all(name.replace('&','&amp;') in page for name in national_names))
+        self.assertIn('2023', self.products['090111']['years'])
+        self.assertIn('Brazil',record['origins'])
+        self.assertIn('Maple Label',page)
 
-    def test_reporting_is_scoped_to_initialized_coolcode_tools(self):
-        for owner, slug, enabled in [
-            ("jsdyer", "coolcode-tool-template", False),
-            ("another-owner", "my-tool", False),
-            ("jsdyer", "my-tool", True),
-        ]:
-            with self.subTest(owner=owner, slug=slug):
-                self.edit(id=slug, url=f"/{slug}/", source=f"https://github.com/{owner}/{slug}")
-                build(self.root)
-                page = (self.root / "dist/index.html").read_text()
-                self.assertEqual('/assets/tool-metrics.js' in page, enabled)
-                self.assertEqual(f'https://coolcode.ca/report/?tool={slug}' in page, enabled)
-                self.assertNotIn("{{", page)
+    def test_company_search_index_and_sensitive_script_escaping(self):
+        extra={'999998':{'years':{'2022':{'description':'Token </script>', 'national':[0], 'origins':{}, 'firms':[['Café test','Québec','Québec']]}}}}
+        label={'999998':['Example <beans>','Research']}
+        meta={'years':{'2022':{'catalogue':'https://example.org','files':{}}},'checked_at':'2023-10-04T00:00:00Z'}
+        page=overview(meta,extra,label,'./',directory=True)
+        self.assertIn('Example &lt;beans&gt;',page)
+        fields=json.loads(re.search(r'id="catalog-fields">(.*?)</script>',page).group(1))
+        self.assertIn('Café test Québec Québec', fields['999998'])
+        self.assertIn('Token </script>',fields['999998'][0])
+        self.assertIn('2022',profile('999998','2022',extra['999998'],label,meta,'../../'))
 
-    def test_common_pages_are_opt_in_and_preserve_root_search_title_and_stats(self):
-        self.edit(id="example", url="/example/", source="https://github.com/jsdyer/example")
-        build(self.root)
-        route = self.root / "dist/remove-duplicate-cities/index.html"
-        self.assertFalse(route.exists())
-        entry = self.root / "web/index.html"
-        entry.write_text(re.sub(r"<title>.*?</title>", "<title>Custom search title · CoolCode</title>",
-                                entry.read_text(), count=1, flags=re.S))
-        shutil.copytree(ROOT / "examples/common-pages", self.root / "common-pages")
-        build(self.root)
-        root = (self.root / "dist/index.html").read_text()
-        self.assertIn("<title>Custom search title · CoolCode</title>", root)
-        self.assertIn('href="./remove-duplicate-cities/"', root)
-        self.assertIn('rel="canonical" href="https://coolcode.ca/example/"', root)
-        page = route.read_text()
-        self.assertIn("<title>Remove duplicate cities from a list · CoolCode</title>", page)
-        self.assertIn('rel="canonical" href="https://coolcode.ca/example/remove-duplicate-cities/"', page)
-        self.assertIn('src="../app.mjs"', page)
-        self.assertIn('data-tool-id="example"', page)
-        self.assertIn('src="/assets/tool-metrics.js"', page)
-        self.assertIn("Vancouver\nHalifax\nCharlottetown</textarea>", page)
+    def test_origin_evidence_survives_missing_description_and_national_row(self):
+        with tempfile.TemporaryDirectory() as temp:
+            files = [Path(temp)/f'{i}.csv' for i in range(3)]
+            fields = ['HS6-SH6','COMPANY-ENTREPRISE','CITY-VILLE','PROVINCE_ENG','DATA_YEAR-ANNÉE_DES_DONNÉES']
+            headers = [['HS6-SH6','DESCRIPTION_ENG'],fields,[*fields,'COUNTRY']]
+            records = [[['012345','Official']],
+                       [['012345','Alpha','Ottawa','Ontario','2020']],
+                       [['012345','Alpha','Ottawa','Ontario','2020','Japan'],['012346','Beta','Toronto','Ontario','2020','Brazil']]]
+            for path, header, rows in zip(files,headers,records):
+                with path.open('w',newline='') as f:
+                    writer=csv.writer(f); writer.writerow(header); writer.writerows(rows)
+            result=extract(dict(zip(FILES,files)), '2020',{'012345':['One','Test'],'012346':['Two','Test']})
+            self.assertEqual(result['012346']['description_source'],'Import Trail')
+            self.assertEqual(result['012346']['national'],[])
+            self.assertEqual(result['012346']['origins'],{'Brazil':[0]})
+            self.assertEqual(result['012346']['firms'],[('Beta','Toronto','Ontario')])
+            self.assertEqual(result['012345']['description_source'],'ISED')
 
-    def test_rejects_invalid_common_page_paths_and_collisions(self):
-        directory = self.root / "common-pages"
-        directory.mkdir()
-        manifest = directory / "manifest.json"
-        for slug in ("../escape", "/absolute", "a/b", "x?name=1", ""):
-            with self.subTest(slug=slug):
-                manifest.write_text(json.dumps([{"slug": slug, "title": "T", "description": "D"}]))
-                with self.assertRaises(ValueError):
-                    build(self.root)
-        manifest.write_text('[{"slug":"data","title":"Data","description":"Some data"}]')
-        (self.root / "web/data").mkdir()
-        with self.assertRaisesRegex(ValueError, "collides"):
-            build(self.root)
-
-    def test_url_matches_tool_id(self):
-        self.edit(url="/different/")
-        with self.assertRaises(ValueError): metadata(self.root)
-
-    def test_requires_a_source_sentence_and_a_guide_note(self):
-        (self.root / "README.md").write_text("# A tool")
-        with self.assertRaisesRegex(ValueError, "README note"):
-            metadata(self.root)
-        self.edit(data_info={"mode": "local", "detail": ""})
-        with self.assertRaisesRegex(ValueError, "homepage card"):
-            metadata(self.root)
-
-    def test_browser_access_is_explicit(self):
-        self.edit(access="install")
-        with self.assertRaisesRegex(ValueError, "immediately usable"):
-            metadata(self.root)
-
-    def test_failed_build_keeps_existing_output(self):
-        build(self.root)
-        existing = (self.root / "dist/index.html").read_bytes()
-        self.edit(source="javascript:bad()")
-        with self.assertRaises(ValueError): build(self.root)
-        self.assertEqual((self.root / "dist/index.html").read_bytes(), existing)
-
-
-if __name__ == "__main__": unittest.main()
+if __name__=='__main__':
+    unittest.main()

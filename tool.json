@@ -1,16 +1,18 @@
 {
-  "id": "coolcode-tool-template",
-  "title": "CoolCode Tool Starter",
-  "description": "A browser-only example that trims lines and removes exact duplicates.",
-  "category": "security",
-  "tags": ["text", "lines", "duplicates"],
-  "icon": "scan-search",
-  "url": "/coolcode-tool-template/",
-  "source": "https://github.com/jsdyer/coolcode-tool-template",
+  "id": "importtrail",
+  "title": "Import Trail",
+  "description": "Find the companies listed for selected imports into Canada. Explore products, importer addresses, countries of origin and annual editions.",
+  "category": "money",
+  "tags": ["imports", "Canada", "trade", "companies", "HS6", "supply chains", "consumer products", "coffee"],
+  "icon": "package-search",
+  "url": "/importtrail/",
+  "source": "https://github.com/jsdyer/importtrail",
   "hosting": "project",
   "access": "browser",
   "data_info": {
-    "mode": "local",
-    "detail": "The browser reads the text you paste and compares its lines."
-  }
+    "mode": "snapshot",
+    "cadence": "Monthly",
+    "detail": "Annual ISED Canadian Importers Database workbooks supply the major-importer lists. Selected product reports also supply cumulative import values and shares."
+  },
+  "result_directory": {"path": "records/", "title": "Canadian importers by product and trade year"}
 }
